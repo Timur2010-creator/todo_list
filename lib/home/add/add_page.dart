@@ -40,20 +40,22 @@ class _AddPageState extends State<AddPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 18),
+          icon: Icon(Icons.arrow_back_ios_new, color: theme.colorScheme.onSurface, size: 18),
           onPressed: () => Navigator.pop(context), // Просто возвращаемся ничего не сохраняя
         ),
         title: Text(
           _isEditing ? 'Редактировать' : 'Новая задача',
-          style: const TextStyle(
-            color: Colors.black,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
@@ -74,9 +76,9 @@ class _AddPageState extends State<AddPage> {
 
               Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE5E7EB),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.black45, width: 1),
+                  border: Border.all(color: theme.colorScheme.outlineVariant, width: 1),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: TextField(
@@ -84,10 +86,10 @@ class _AddPageState extends State<AddPage> {
                   maxLines: 3,
                   minLines: 1,
                   autofocus: true, // Сразу ставим фокус на поле ввода
-                  decoration: const InputDecoration(
-                    hintText: 'введите название задачи',
+                  decoration: InputDecoration(
+                    hintText: 'Введите название задачи',
                     hintStyle: TextStyle(
-                      color: Colors.black45,
+                      color: theme.colorScheme.onSurfaceVariant,
                       fontSize: 14,
                     ),
                     border: InputBorder.none,

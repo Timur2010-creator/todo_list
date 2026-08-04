@@ -1,7 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:todo_list/home/add/add_page.dart';
+import 'dart:convert';
 
-class TaskItem {// Модель данных для одной задачи (добавлен ID для точной идентификации)
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:todo_list/home/add/add_page.dart';
+import 'package:todo_list/home/settings_page.dart';
+
+class TaskItem { // Модель данных для одной задачи (добавлен ID для точной идентификации)
   final String id;
   String title;
   bool isDone;
@@ -16,18 +20,67 @@ class TaskItem {// Модель данных для одной задачи (д�
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final bool isDarkMode;
+  final bool isRussian;
+  final ValueChanged<bool> onThemeChanged;
+  final VoidCallback onLanguageChanged;
+
+  const HomePage({
+    super.key,
+    required this.isDarkMode,
+    required this.isRussian,
+    required this.onThemeChanged,
+    required this.onLanguageChanged,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<TaskItem> _tasks = [  // Список задач (теперь с ID)
-    TaskItem(id: '1', title: 'Сделать домашнее задание', isDone: false, time: '14:02:26'),
-    TaskItem(id: '2', title: 'Помыть посуду', isDone: true, time: '14:05:10'),
-    TaskItem(id: '3', title: 'Купить продукты', isDone: false, time: '15:10:00'),
-  ];
+  final List<TaskItem> _tasks = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTasks();
+  }
+
+  Future<void> _loadTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedTasks = prefs.getStringList('tasks') ?? [];
+
+    setState(() {
+      _tasks.clear();
+      for (final taskJson in storedTasks) {
+        try {
+          final decoded = jsonDecode(taskJson) as Map<String, dynamic>;
+          _tasks.add(
+            TaskItem(
+              id: decoded['id']?.toString() ?? DateTime.now().toString(),
+              title: decoded['title']?.toString() ?? '',
+              isDone: decoded['isDone'] as bool? ?? false,
+              time: decoded['time']?.toString() ?? _getCurrentTimeString(),
+            ),
+          );
+        } catch (_) {
+          continue;
+        }
+      }
+    });
+  }
+
+  Future<void> _saveTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final encodedTasks = _tasks.map((task) => jsonEncode({
+      'id': task.id,
+      'title': task.title,
+      'isDone': task.isDone,
+      'time': task.time,
+    })).toList();
+
+    await prefs.setStringList('tasks', encodedTasks);
+  }
 
   // Вспомогательный метод для получения текущего времени строкой
   String _getCurrentTimeString() {
@@ -40,13 +93,14 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _tasks.add(
         TaskItem(
-          id: DateTime.now().toString(), // Генерируем уникальный ID
+          id: DateTime.now().toString(),
           title: title,
           isDone: false,
           time: _getCurrentTimeString(),
         ),
       );
     });
+    _saveTasks();
   }
 
   // 2. Удаление задачи по индексу
@@ -54,7 +108,8 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _tasks.removeAt(index);
     });
-    ScaffoldMessenger.of(context).showSnackBar(  // Добавил уведомление внизу экрана
+    _saveTasks();
+    ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Задача удалена'), duration: Duration(seconds: 2)),
     );
   }
@@ -76,29 +131,102 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _tasks[index].title = updatedText.trim();
       });
+      _saveTasks();
+    }
+  }
+
+  // 4. Очистка всех задач
+  Future<void> _clearAllTasks() async {
+    final shouldClear = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Очистить все задачи?'),
+        content: const Text('Это удалит все сохранённые задачи с устройства.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Нет'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Да'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldClear == true) { // Если пользователь подтвердил очистку
+      setState(() {
+        _tasks.clear(); // Очищаем список задач
+      });
+      await _saveTasks(); // Сохраняем пустой список в SharedPreferences
+      if (!mounted) return; // Если виджет был удален из дерева, выходим
+      if (Navigator.canPop(context)) { // Проверяем, можно ли вернуться на предыдущий экран
+        Navigator.pop(context); // Возвращаемся на предыдущий экран, если возможно
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Все задачи очищены'), duration: Duration(seconds: 2)),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isRussian = widget.isRussian;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: const Text(
-          'Мои задачи',
+        title: Text(
+          isRussian ? 'Мои задачи' : 'My tasks',
           style: TextStyle(
-            color: Colors.black,
+            color: theme.colorScheme.onSurface,
             fontSize: 24,
             fontWeight: FontWeight.w600,
           ),
         ),
         centerTitle: true,
+        actions: [
+          TextButton.icon(
+            onPressed: widget.onLanguageChanged,
+            icon: const Icon(Icons.language, size: 18),
+            label: Text(isRussian ? 'Сменить язык' : 'Change language'),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_outlined),
+            onPressed: _clearAllTasks,
+            tooltip: isRussian ? 'Очистить задачи' : 'Clear tasks',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SettingsPage(
+                    isRussian: widget.isRussian,
+                    isDarkMode: widget.isDarkMode,
+                    onThemeChanged: widget.onThemeChanged,
+                    onLanguageChanged: widget.onLanguageChanged,
+                    onClearTasks: _clearAllTasks,
+                  ),
+                ),
+              );
+            },
+            tooltip: isRussian ? 'Настройки' : 'Settings',
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.0),
-          child: Container(color: Colors.grey.shade300, height: 1.0),
+          child: Container(color: theme.dividerColor, height: 1.0),
         ),
       ),
       body: SafeArea(
@@ -106,7 +234,7 @@ class _HomePageState extends State<HomePage> {
           children: [
             Expanded(
               child: _tasks.isEmpty
-                  ? const Center(child: Text("Задач пока нет. Добавьте первую!", style: TextStyle(color: Colors.grey)))
+                  ? Center(child: Text(isRussian ? 'Добавьте первую задачу' : 'Add your first task', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)))
                   : ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 itemCount: _tasks.length,
@@ -116,8 +244,8 @@ class _HomePageState extends State<HomePage> {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6),
-                      borderRadius: BorderRadius.circular(10),
+                      color: theme.colorScheme.primary,
+                      borderRadius: BorderRadius.circular(15), // Скругление углов карточек заданий
                     ),
                     child: Stack( // Используем Stack, чтобы кнопка меню была поверх всего
                       children: [
@@ -136,9 +264,9 @@ class _HomePageState extends State<HomePage> {
                                         task.isDone = value ?? false;
                                       });
                                     },
-                                    activeColor: Colors.white,
-                                    checkColor: const Color(0xFF3B82F6),
-                                    side: const BorderSide(color: Colors.white, width: 2),
+                                    activeColor: theme.colorScheme.onPrimary,
+                                    checkColor: theme.colorScheme.primary,
+                                    side: BorderSide(color: theme.colorScheme.onPrimary, width: 2),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(4),
                                     ),
@@ -153,12 +281,12 @@ class _HomePageState extends State<HomePage> {
                                     child: Text(
                                       task.title,
                                       style: TextStyle(
-                                        color: Colors.white,
+                                        color: theme.colorScheme.onPrimary,
                                         fontSize: 15,
                                         decoration: task.isDone
                                             ? TextDecoration.lineThrough
                                             : TextDecoration.none,
-                                        decorationColor: Colors.white,
+                                        decorationColor: theme.colorScheme.onPrimary,
                                       ),
                                     ),
                                   ),
@@ -170,8 +298,8 @@ class _HomePageState extends State<HomePage> {
 
                             Text(
                               task.time,
-                              style: const TextStyle(
-                                color: Colors.white70,
+                              style: TextStyle(
+                                color: theme.colorScheme.onPrimary.withValues(alpha: 0.7),
                                 fontSize: 11,
                               ),
                             ),
@@ -182,7 +310,7 @@ class _HomePageState extends State<HomePage> {
                           top: -10, // Сдвигаем вверх, т.к. у PopupMenuButton есть свои отступы
                           right: -10,
                           child: PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert, color: Colors.white),
+                            icon: Icon(Icons.more_vert, color: theme.colorScheme.onPrimary),
                             onSelected: (String value) {
                               if (value == 'edit') {
                                 _editTask(index);
@@ -240,15 +368,15 @@ class _HomePageState extends State<HomePage> {
                     }
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3B82F6),
+                    backgroundColor: Color(0xFF3B82F6),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(18), // Скругление углов кнопки "Добавить задачу"
                     ),
                   ),
-                  child: const Text(
-                    '+ Добавить задачу',
-                    style: TextStyle(
+                  child: Text(
+                    isRussian ? '+ Добавить задачу' : '+ Add task',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
                       fontWeight: FontWeight.w500,

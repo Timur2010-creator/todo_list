@@ -1,30 +1,75 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:todo_list/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferences.getInstance();
+  });
+
+  testWidgets('opens settings and switches theme to dark', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Мои задачи'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.tap(find.byIcon(Icons.settings));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Тема приложения'), findsOneWidget);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+
+    final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(materialApp.themeMode, ThemeMode.dark);
+  });
+
+  testWidgets('switches the app language from the home page', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+
+    expect(find.text('Мои задачи'), findsOneWidget);
+    expect(find.text('Сменить язык'), findsOneWidget);
+
+    await tester.tap(find.text('Сменить язык'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('My tasks'), findsOneWidget);
+  });
+
+  testWidgets('clears all saved tasks from settings', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({
+      'tasks': [
+        jsonEncode({
+          'id': '1',
+          'title': 'Проверка очистки',
+          'isDone': false,
+          'time': '12:00:00',
+        }),
+      ],
+    });
+
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Проверка очистки'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.settings));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Очистить все задачи'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Да'));
+    await tester.pumpAndSettle();
+
+    final prefs = await SharedPreferences.getInstance(); // Получаем экземпляр SharedPreferences после очистки задач
+    expect(prefs.getStringList('tasks'), isEmpty);
   });
 }
