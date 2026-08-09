@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:todo_list/home/add/add_page.dart';
@@ -39,11 +39,26 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final List<TaskItem> _tasks = [];
+  late Timer _clockTimer;
+  DateTime _currentTime = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {
+          _currentTime = DateTime.now();
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer.cancel();
+    super.dispose();
   }
 
   Future<void> _loadTasks() async {
@@ -88,6 +103,16 @@ class _HomePageState extends State<HomePage> {
     return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
   }
 
+  String _formatClockTime() {
+    final now = _currentTime.toLocal();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatClockDate() {
+    final now = _currentTime.toLocal();
+    return '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
+  }
+
   // 1. Создание новой задачи
   void _addNewTask(String title) {
     setState(() {
@@ -110,7 +135,10 @@ class _HomePageState extends State<HomePage> {
     });
     _saveTasks();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Задача удалена'), duration: Duration(seconds: 2)),
+      SnackBar(
+        content: Text(widget.isRussian ? 'Задача удалена' : 'Task deleted'),
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -122,6 +150,7 @@ class _HomePageState extends State<HomePage> {
       MaterialPageRoute(
         builder: (context) => AddPage(
           initialText: _tasks[index].title, // Передаем текст для редактирования
+          isRussian: widget.isRussian,
         ),
       ),
     );
@@ -140,16 +169,20 @@ class _HomePageState extends State<HomePage> {
     final shouldClear = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Очистить все задачи?'),
-        content: const Text('Это удалит все сохранённые задачи с устройства.'),
+        title: Text(widget.isRussian ? 'Очистить все задачи?' : 'Clear all tasks?'),
+        content: Text(
+          widget.isRussian
+              ? 'Это удалит все сохранённые задачи с устройства.'
+              : 'This will delete all saved tasks from the device.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Нет'),
+            child: Text(widget.isRussian ? 'Нет' : 'No'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Да'),
+            child: Text(widget.isRussian ? 'Да' : 'Yes'),
           ),
         ],
       ),
@@ -165,7 +198,10 @@ class _HomePageState extends State<HomePage> {
         Navigator.pop(context); // Возвращаемся на предыдущий экран, если возможно
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Все задачи очищены'), duration: Duration(seconds: 2)),
+        SnackBar(
+          content: Text(widget.isRussian ? 'Все задачи очищены' : 'All tasks cleared'),
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -181,8 +217,50 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
         scrolledUnderElevation: 0,
+        leadingWidth: 112,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 8, top: 4, bottom: 4),
+          child: Container(
+            width: 100,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary, // Цвет градиента (синий)
+                  theme.colorScheme.primary.withValues(alpha: 0.9), // Более светлый оттенок синего
+                ],
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  _formatClockTime(),
+                  style: TextStyle(
+                    color: theme.colorScheme.onPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+
+                const SizedBox(height: 2),
+                
+                Text(
+                  _formatClockDate(),
+                  style: TextStyle(
+                    color: theme.colorScheme.onPrimary.withValues(alpha: 0.95),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         title: Text(
-          isRussian ? 'Мои задачи' : 'My tasks',
+          isRussian ? 'Мои задачи' : 'My tasks', // Название приложения меняется в зависимости от выбранного языка
           style: TextStyle(
             color: theme.colorScheme.onSurface,
             fontSize: 24,
@@ -191,20 +269,23 @@ class _HomePageState extends State<HomePage> {
         ),
         centerTitle: true,
         actions: [
-          TextButton.icon(
+
+          // Кнопка смены языка 
+          IconButton(
             onPressed: widget.onLanguageChanged,
             icon: const Icon(Icons.language, size: 18),
-            label: Text(isRussian ? 'Сменить язык' : 'Change language'),
-            style: TextButton.styleFrom(
-              foregroundColor: theme.colorScheme.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
+            color: theme.colorScheme.primary,
+            tooltip: isRussian ? 'Сменить язык' : 'Change language', // Чтобы менялись текста подсказок при смене языка
           ),
+
+          // Кнопка очистки всех задач
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
             onPressed: _clearAllTasks,
-            tooltip: isRussian ? 'Очистить задачи' : 'Clear tasks',
+            tooltip: isRussian ? 'Очистить задачи' : 'Clear tasks', // Чтобы менялись текста подсказок при смене языка
           ),
+
+          // Кнопка перехода в настройки
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -221,7 +302,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               );
             },
-            tooltip: isRussian ? 'Настройки' : 'Settings',
+            tooltip: isRussian ? 'Настройки' : 'Settings', // Чтобы менялись текста подсказок при смене языка
           ),
         ],
         bottom: PreferredSize(
@@ -244,7 +325,7 @@ class _HomePageState extends State<HomePage> {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
+                      color: Color(0xFF3B82F6), // Цвет карточки заданий (светло-голубой)
                       borderRadius: BorderRadius.circular(15), // Скругление углов карточек заданий
                     ),
                     child: Stack( // Используем Stack, чтобы кнопка меню была поверх всего
@@ -264,8 +345,8 @@ class _HomePageState extends State<HomePage> {
                                         task.isDone = value ?? false;
                                       });
                                     },
-                                    activeColor: theme.colorScheme.onPrimary,
-                                    checkColor: theme.colorScheme.primary,
+                                    activeColor: theme.colorScheme.onPrimary, // Цвет галочки в чекбоксе (прозрачный - цвет карточки)
+                                    checkColor: theme.colorScheme.primary, // Цвет фона галочки (белый)
                                     side: BorderSide(color: theme.colorScheme.onPrimary, width: 2),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(4),
@@ -279,7 +360,8 @@ class _HomePageState extends State<HomePage> {
                                   child: Padding(
                                     padding: const EdgeInsets.only(right: 30), // Отступ для иконки меню
                                     child: Text(
-                                      task.title,
+                                      task.title, // Название задачи
+                                      maxLines: 3,
                                       style: TextStyle(
                                         color: theme.colorScheme.onPrimary,
                                         fontSize: 15,
@@ -297,7 +379,7 @@ class _HomePageState extends State<HomePage> {
                             const SizedBox(height: 4),
 
                             Text(
-                              task.time,
+                              task.time, // Время создания задачи
                               style: TextStyle(
                                 color: theme.colorScheme.onPrimary.withValues(alpha: 0.7),
                                 fontSize: 11,
@@ -319,23 +401,26 @@ class _HomePageState extends State<HomePage> {
                               }
                             },
                             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                              const PopupMenuItem<String>(
+                              PopupMenuItem<String>(
                                 value: 'edit',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.edit, color: Colors.black54, size: 20),
-                                    SizedBox(width: 8),
-                                    Text('Редактировать'),
+                                    const Icon(Icons.edit, color: Colors.black54, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(widget.isRussian ? 'Редактировать' : 'Edit'),
                                   ],
                                 ),
                               ),
-                              const PopupMenuItem<String>(
+                              PopupMenuItem<String>(
                                 value: 'delete',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.delete, color: Colors.red, size: 20),
-                                    SizedBox(width: 8),
-                                    Text('Удалить', style: TextStyle(color: Colors.red)),
+                                    const Icon(Icons.delete, color: Colors.red, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      widget.isRussian ? 'Удалить' : 'Delete',
+                                      style: const TextStyle(color: Colors.red),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -359,7 +444,9 @@ class _HomePageState extends State<HomePage> {
                     // Переходим на второй экран БЕЗ initialText (режим создания)
                     final newTaskTitle = await Navigator.push<String>(
                       context,
-                      MaterialPageRoute(builder: (context) => const AddPage()),
+                      MaterialPageRoute(
+                        builder: (context) => AddPage(isRussian: widget.isRussian),
+                      ),
                     );
 
                     // Если пользователь ввел текст и нажал "Сохранить", добавляем его

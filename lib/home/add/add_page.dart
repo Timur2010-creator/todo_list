@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 class AddPage extends StatefulWidget {
   final String? initialText;  // Параметр для редактирования. Если null -> создаем новую, если есть текст -> редактируем
+  final bool isRussian;
 
-  const AddPage({super.key, this.initialText});
+  const AddPage({super.key, this.initialText, required this.isRussian});
 
   @override
   State<AddPage> createState() => _AddPageState();
@@ -53,7 +54,9 @@ class _AddPageState extends State<AddPage> {
           onPressed: () => Navigator.pop(context), // Просто возвращаемся ничего не сохраняя
         ),
         title: Text(
-          _isEditing ? 'Редактировать' : 'Новая задача',
+          widget.isRussian
+              ? (_isEditing ? 'Редактировать' : 'Новая задача')
+              : (_isEditing ? 'Edit task' : 'New task'),
           style: TextStyle(
             color: theme.colorScheme.onSurface,
             fontSize: 18,
@@ -87,7 +90,7 @@ class _AddPageState extends State<AddPage> {
                   minLines: 1,
                   autofocus: true, // Сразу ставим фокус на поле ввода
                   decoration: InputDecoration(
-                    hintText: 'Введите название задачи',
+                    hintText: widget.isRussian ? 'Введите название задачи' : 'Enter task name',
                     hintStyle: TextStyle(
                       color: theme.colorScheme.onSurfaceVariant,
                       fontSize: 14,
@@ -112,7 +115,9 @@ class _AddPageState extends State<AddPage> {
                     ),
                   ),
                   child: Text(
-                    _isEditing ? 'Обновить' : 'Сохранить', // Меняем текст кнопки
+                    widget.isRussian
+                        ? (_isEditing ? 'Обновить' : 'Сохранить')
+                        : (_isEditing ? 'Update' : 'Save'),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,

@@ -1,9 +1,7 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:todo_list/main.dart';
 
 void main() {
@@ -41,6 +39,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('My tasks'), findsOneWidget);
+  });
+
+  testWidgets('switches the language on the task editor screen', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+
+    await tester.tap(find.text('Сменить язык'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('+ Add task'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('New task'), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
   });
 
   testWidgets('clears all saved tasks from settings', (WidgetTester tester) async {
