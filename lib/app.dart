@@ -1,8 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:todo_list/home/home_page.dart';
+import 'package:todo_list/onboarding_page.dart';
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final bool initialOnboardingSeen;
+
+  const MyApp({super.key, this.initialOnboardingSeen = false});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -11,6 +15,13 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   ThemeMode _themeMode = ThemeMode.light;
   bool _isRussian = true;
+  late bool _isOnboardingSeen;
+
+  @override
+  void initState() {
+    super.initState();
+    _isOnboardingSeen = widget.initialOnboardingSeen;
+  }
 
   void _toggleTheme(bool isDark) {
     setState(() {
@@ -21,6 +32,15 @@ class _MyAppState extends State<MyApp> {
   void _toggleLanguage() {
     setState(() {
       _isRussian = !_isRussian;
+    });
+  }
+
+  Future<void> _completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboardingSeen', true);
+
+    setState(() {
+      _isOnboardingSeen = true;
     });
   }
 
@@ -43,12 +63,17 @@ class _MyAppState extends State<MyApp> {
         ),
         scaffoldBackgroundColor: const Color(0xFF111827),
       ),
-      home: HomePage(
-        isRussian: _isRussian,
-        isDarkMode: _themeMode == ThemeMode.dark,
-        onThemeChanged: _toggleTheme,
-        onLanguageChanged: _toggleLanguage,
-      ),
+      home: _isOnboardingSeen
+          ? HomePage(
+              isRussian: _isRussian,
+              isDarkMode: _themeMode == ThemeMode.dark,
+              onThemeChanged: _toggleTheme,
+              onLanguageChanged: _toggleLanguage,
+            )
+          : OnboardingPage(
+              isRussian: _isRussian,
+              onComplete: _completeOnboarding,
+            ),
     );
   }
 }
