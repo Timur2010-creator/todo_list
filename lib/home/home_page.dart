@@ -1,23 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:todo_list/database/app_database.dart';
 import 'package:todo_list/home/add/add_page.dart';
-import 'package:todo_list/home/settings_page.dart';
+import 'package:todo_list/home/details/todo_details_page.dart';
+import 'package:todo_list/home/settings/settings_page.dart';
 
-class TaskItem { // Модель данных для одной задачи (добавлен ID для точной идентификации)
-  final String id;
-  String title;
-  bool isDone;
-  final String time;
-
-  TaskItem({
-    required this.id,
-    required this.title,
-    this.isDone = false,
-    required this.time,
-  });
-}
+typedef TaskItem = Todo;
 
 class HomePage extends StatefulWidget {
   final bool isDarkMode;
@@ -39,19 +27,17 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final List<TaskItem> _tasks = [];
+  final AppDatabase _database = AppDatabase();
   late Timer _clockTimer;
   DateTime _currentTime = DateTime.now();
+  bool _showCompleted = false;
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() {
-          _currentTime = DateTime.now();
-        });
-      }
+      if (mounted) setState(() => _currentTime = DateTime.now());
     });
   }
 
@@ -62,419 +48,496 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final storedTasks = prefs.getStringList('tasks') ?? [];
-
+    final todos = await _database.getTodos();
+    if (!mounted) return;
     setState(() {
-      _tasks.clear();
-      for (final taskJson in storedTasks) {
-        try {
-          final decoded = jsonDecode(taskJson) as Map<String, dynamic>;
-          _tasks.add(
-            TaskItem(
-              id: decoded['id']?.toString() ?? DateTime.now().toString(),
-              title: decoded['title']?.toString() ?? '',
-              isDone: decoded['isDone'] as bool? ?? false,
-              time: decoded['time']?.toString() ?? _getCurrentTimeString(),
-            ),
-          );
-        } catch (_) {
-          continue;
-        }
-      }
+      _tasks
+        ..clear()
+        ..addAll(todos);
     });
   }
 
-  Future<void> _saveTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final encodedTasks = _tasks.map((task) => jsonEncode({
-      'id': task.id,
-      'title': task.title,
-      'isDone': task.isDone,
-      'time': task.time,
-    })).toList();
-
-    await prefs.setStringList('tasks', encodedTasks);
-  }
-
-  // Вспомогательный метод для получения текущего времени строкой
   String _getCurrentTimeString() {
     final now = DateTime.now();
     return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
   }
 
-  String _formatClockTime() {
-    final now = _currentTime.toLocal();
-    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  String _formatDate() {
+    const months = [
+      'января',
+      'февраля',
+      'марта',
+      'апреля',
+      'мая',
+      'июня',
+      'июля',
+      'августа',
+      'сентября',
+      'октября',
+      'ноября',
+      'декабря',
+    ];
+    return widget.isRussian
+        ? '${_currentTime.day} ${months[_currentTime.month - 1]}'
+        : '${_currentTime.month}/${_currentTime.day}/${_currentTime.year}';
   }
 
-  String _formatClockDate() {
-    final now = _currentTime.toLocal();
-    return '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
-  }
-
-  // 1. Создание новой задачи
-  void _addNewTask(String title) {
-    setState(() {
-      _tasks.add(
-        TaskItem(
-          id: DateTime.now().toString(),
-          title: title,
-          isDone: false,
-          time: _getCurrentTimeString(),
-        ),
-      );
-    });
-    _saveTasks();
-  }
-
-  // 2. Удаление задачи по индексу
-  void _deleteTask(int index) {
-    setState(() {
-      _tasks.removeAt(index);
-    });
-    _saveTasks();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(widget.isRussian ? 'Задача удалена' : 'Task deleted'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  // 3. Редактирование задачи
-  Future<void> _editTask(int index) async {
-    // Переходим на ту же страницу, но передаем текущий текст
-    final updatedText = await Navigator.push<String>(
+  Future<void> _openEditor({TaskItem? task}) async {
+    final title = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: (context) => AddPage(
-          initialText: _tasks[index].title, // Передаем текст для редактирования
+        builder: (_) =>
+            AddPage(initialText: task?.title, isRussian: widget.isRussian),
+      ),
+    );
+    if (title == null || title.trim().isEmpty) return;
+    setState(() {
+      if (task == null) {
+        _tasks.insert(
+          0,
+          TaskItem(
+            id: DateTime.now().toString(),
+            title: title.trim(),
+            time: _getCurrentTimeString(),
+          ),
+        );
+      } else {
+        task.title = title.trim();
+      }
+    });
+    if (task == null) {
+      await _database.insertTodo(_tasks.first);
+    } else {
+      await _database.updateTodo(task);
+    }
+  }
+
+  void _toggleTask(TaskItem task, bool value) {
+    setState(() => task.isDone = value);
+    _database.updateTodo(task);
+  }
+
+  Future<void> _deleteTask(TaskItem task) async {
+    setState(() => _tasks.removeWhere((item) => item.id == task.id));
+    await _database.deleteTodo(task);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(widget.isRussian ? 'Задача удалена' : 'Task deleted'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openDetails(TaskItem task) async {
+    final result = await Navigator.push<TodoDetailsResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TodoDetailsPage(
+          todo: task,
+          database: _database,
           isRussian: widget.isRussian,
         ),
       ),
     );
-
-    // Если вернулся текст и он не пустой
-    if (updatedText != null && updatedText.trim().isNotEmpty) {
+    if (!mounted || result == null) return;
+    if (result.deleted) {
+      setState(() => _tasks.removeWhere((item) => item.id == task.id));
+    } else if (result.todo != null) {
       setState(() {
-        _tasks[index].title = updatedText.trim();
+        final index = _tasks.indexWhere((item) => item.id == result.todo!.id);
+        if (index != -1) _tasks[index] = result.todo!;
       });
-      _saveTasks();
     }
   }
 
-  // 4. Очистка всех задач
   Future<void> _clearAllTasks() async {
+    if (_tasks.isEmpty) return;
     final shouldClear = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(widget.isRussian ? 'Очистить все задачи?' : 'Clear all tasks?'),
+      builder: (_) => AlertDialog(
+        title: Text(
+          widget.isRussian ? 'Очистить все задачи?' : 'Clear all tasks?',
+        ),
         content: Text(
           widget.isRussian
-              ? 'Это удалит все сохранённые задачи с устройства.'
-              : 'This will delete all saved tasks from the device.',
+              ? 'Все задачи будут удалены с устройства.'
+              : 'All tasks will be removed from this device.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text(widget.isRussian ? 'Нет' : 'No'),
+            child: Text(widget.isRussian ? 'Отмена' : 'Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(widget.isRussian ? 'Да' : 'Yes'),
+            child: Text(widget.isRussian ? 'Очистить' : 'Clear'),
           ),
         ],
       ),
     );
-
-    if (shouldClear == true) { // Если пользователь подтвердил очистку
-      setState(() {
-        _tasks.clear(); // Очищаем список задач
-      });
-      await _saveTasks(); // Сохраняем пустой список в SharedPreferences
-      if (!mounted) return; // Если виджет был удален из дерева, выходим
-      if (Navigator.canPop(context)) { // Проверяем, можно ли вернуться на предыдущий экран
-        Navigator.pop(context); // Возвращаемся на предыдущий экран, если возможно
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.isRussian ? 'Все задачи очищены' : 'All tasks cleared'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+    if (shouldClear != true) return;
+    setState(_tasks.clear);
+    await _database.deleteAllTodos();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isRussian = widget.isRussian;
+    final completed = _tasks.where((task) => task.isDone).length;
+    final visibleTasks = _tasks
+        .where((task) => task.isDone == _showCompleted)
+        .toList();
+    final progress = _tasks.isEmpty ? 0.0 : completed / _tasks.length;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leadingWidth: 112,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 8, top: 4, bottom: 4),
-          child: Container(
-            width: 100,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: LinearGradient(
-                colors: [
-                  theme.colorScheme.primary, // Цвет градиента (синий)
-                  theme.colorScheme.primary.withValues(alpha: 0.9), // Более светлый оттенок синего
-                ],
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (widget.isRussian
+                                    ? 'С возвращением'
+                                    : 'Welcome back')
+                                .toUpperCase(),
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              letterSpacing: 1.5,
+                              fontWeight: FontWeight.w800,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            _formatDate(),
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton.filledTonal(
+                      onPressed: widget.onLanguageChanged,
+                      icon: const Icon(Icons.language_rounded),
+                      tooltip: widget.isRussian
+                          ? 'Сменить язык'
+                          : 'Change language',
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton.filledTonal(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SettingsPage(
+                            isRussian: widget.isRussian,
+                            isDarkMode: widget.isDarkMode,
+                            onThemeChanged: widget.onThemeChanged,
+                            onLanguageChanged: widget.onLanguageChanged,
+                            onClearTasks: _clearAllTasks,
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.tune_rounded),
+                      tooltip: widget.isRussian ? 'Настройки' : 'Settings',
+                    ),
+                  ],
+                ),
               ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  _formatClockTime(),
-                  style: TextStyle(
-                    color: theme.colorScheme.onPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary,
+                        const Color(0xFF174E63),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withValues(alpha: .22),
+                        blurRadius: 24,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.isRussian
+                                  ? 'Фокус на сегодня'
+                                  : 'Focus for today',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 21,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '$completed/${_tasks.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.isRussian
+                            ? (completed == _tasks.length && _tasks.isNotEmpty
+                                  ? 'Отлично. Всё выполнено.'
+                                  : 'Маленькие шаги складываются в большой результат.')
+                            : (completed == _tasks.length && _tasks.isNotEmpty
+                                  ? 'Great. Everything is complete.'
+                                  : 'Small steps make a big difference.'),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: .78),
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 9,
+                          backgroundColor: Colors.white.withValues(alpha: .18),
+                          valueColor: const AlwaysStoppedAnimation(
+                            Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-
-                const SizedBox(height: 2),
-                
-                Text(
-                  _formatClockDate(),
-                  style: TextStyle(
-                    color: theme.colorScheme.onPrimary.withValues(alpha: 0.95),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 26, 20, 12),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    Text(
+                      widget.isRussian ? 'Твои задачи' : 'Your tasks',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Spacer(),
+                    SegmentedButton<bool>(
+                      segments: [
+                        ButtonSegment(
+                          value: false,
+                          label: Text(widget.isRussian ? 'Активные' : 'Open'),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          label: Text(widget.isRussian ? 'Готово' : 'Done'),
+                        ),
+                      ],
+                      selected: {_showCompleted},
+                      onSelectionChanged: (value) =>
+                          setState(() => _showCompleted = value.first),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (visibleTasks.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyState(
+                  isRussian: widget.isRussian,
+                  completed: _showCompleted,
+                  onAdd: () => _openEditor(),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
+                sliver: SliverList.builder(
+                  itemCount: visibleTasks.length,
+                  itemBuilder: (_, index) => _TaskCard(
+                    task: visibleTasks[index],
+                    isRussian: widget.isRussian,
+                    onToggle: (value) =>
+                        _toggleTask(visibleTasks[index], value),
+                    onOpen: () => _openDetails(visibleTasks[index]),
+                    onEdit: () => _openEditor(task: visibleTasks[index]),
+                    onDelete: () => _deleteTask(visibleTasks[index]),
                   ),
+                ),
+              ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openEditor(),
+        icon: const Icon(Icons.add_rounded),
+        label: Text(widget.isRussian ? 'Новая задача' : 'New task'), 
+      ),
+    );
+  }
+}
+
+class _TaskCard extends StatelessWidget {
+  final TaskItem task;
+  final bool isRussian;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onOpen;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _TaskCard({
+    required this.task,
+    required this.isRussian,
+    required this.onToggle,
+    required this.onOpen,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final time = task.time.length > 5 ? task.time.substring(0, 5) : task.time;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .42),
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: task.isDone,
+                  onChanged: (value) => onToggle(value ?? false),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        task.title,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          decoration: task.isDone
+                              ? TextDecoration.lineThrough
+                              : null,
+                          color: task.isDone
+                              ? theme.colorScheme.onSurfaceVariant
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '${isRussian ? 'добавлено' : 'added'}  $time',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (value) =>
+                      value == 'edit' ? onEdit() : onDelete(),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Text(isRussian ? 'Изменить' : 'Edit'),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text(isRussian ? 'Удалить' : 'Delete'),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ),
-        title: Text(
-          isRussian ? 'Мои задачи' : 'My tasks', // Название приложения меняется в зависимости от выбранного языка
-          style: TextStyle(
-            color: theme.colorScheme.onSurface,
-            fontSize: 24,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-
-          // Кнопка смены языка 
-          IconButton(
-            onPressed: widget.onLanguageChanged,
-            icon: const Icon(Icons.language, size: 18),
-            color: theme.colorScheme.primary,
-            tooltip: isRussian ? 'Сменить язык' : 'Change language', // Чтобы менялись текста подсказок при смене языка
-          ),
-
-          // Кнопка очистки всех задач
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_outlined),
-            onPressed: _clearAllTasks,
-            tooltip: isRussian ? 'Очистить задачи' : 'Clear tasks', // Чтобы менялись текста подсказок при смене языка
-          ),
-
-          // Кнопка перехода в настройки
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SettingsPage(
-                    isRussian: widget.isRussian,
-                    isDarkMode: widget.isDarkMode,
-                    onThemeChanged: widget.onThemeChanged,
-                    onLanguageChanged: widget.onLanguageChanged,
-                    onClearTasks: _clearAllTasks,
-                  ),
-                ),
-              );
-            },
-            tooltip: isRussian ? 'Настройки' : 'Settings', // Чтобы менялись текста подсказок при смене языка
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: Container(color: theme.dividerColor, height: 1.0),
-        ),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: _tasks.isEmpty
-                  ? Center(child: Text(isRussian ? 'Добавьте первую задачу' : 'Add your first task', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)))
-                  : ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                itemCount: _tasks.length,
-                itemBuilder: (context, index) {
-                  final task = _tasks[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Color(0xFF3B82F6), // Цвет карточки заданий (светло-голубой)
-                      borderRadius: BorderRadius.circular(15), // Скругление углов карточек заданий
-                    ),
-                    child: Stack( // Используем Stack, чтобы кнопка меню была поверх всего
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Row(
-                              children: [
-                                SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: Checkbox(
-                                    value: task.isDone,
-                                    onChanged: (bool? value) {
-                                      setState(() {
-                                        task.isDone = value ?? false;
-                                      });
-                                    },
-                                    activeColor: theme.colorScheme.onPrimary, // Цвет галочки в чекбоксе (прозрачный - цвет карточки)
-                                    checkColor: theme.colorScheme.primary, // Цвет фона галочки (белый)
-                                    side: BorderSide(color: theme.colorScheme.onPrimary, width: 2),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(width: 12),
-
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(right: 30), // Отступ для иконки меню
-                                    child: Text(
-                                      task.title, // Название задачи
-                                      maxLines: 3,
-                                      style: TextStyle(
-                                        color: theme.colorScheme.onPrimary,
-                                        fontSize: 15,
-                                        decoration: task.isDone
-                                            ? TextDecoration.lineThrough
-                                            : TextDecoration.none,
-                                        decorationColor: theme.colorScheme.onPrimary,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 4),
-
-                            Text(
-                              task.time, // Время создания задачи
-                              style: TextStyle(
-                                color: theme.colorScheme.onPrimary.withValues(alpha: 0.7),
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        Positioned(
-                          top: -10, // Сдвигаем вверх, т.к. у PopupMenuButton есть свои отступы
-                          right: -10,
-                          child: PopupMenuButton<String>(
-                            icon: Icon(Icons.more_vert, color: theme.colorScheme.onPrimary),
-                            onSelected: (String value) {
-                              if (value == 'edit') {
-                                _editTask(index);
-                              } else if (value == 'delete') {
-                                _deleteTask(index);
-                              }
-                            },
-                            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                              PopupMenuItem<String>(
-                                value: 'edit',
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.edit, color: Colors.black54, size: 20),
-                                    const SizedBox(width: 8),
-                                    Text(widget.isRussian ? 'Редактировать' : 'Edit'),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.delete, color: Colors.red, size: 20),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      widget.isRussian ? 'Удалить' : 'Delete',
-                                      style: const TextStyle(color: Colors.red),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    // Переходим на второй экран БЕЗ initialText (режим создания)
-                    final newTaskTitle = await Navigator.push<String>(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => AddPage(isRussian: widget.isRussian),
-                      ),
-                    );
-
-                    // Если пользователь ввел текст и нажал "Сохранить", добавляем его
-                    if (newTaskTitle != null && newTaskTitle.trim().isNotEmpty) {
-                      _addNewTask(newTaskTitle.trim());
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF3B82F6),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18), // Скругление углов кнопки "Добавить задачу"
-                    ),
-                  ),
-                  child: Text(
-                    isRussian ? '+ Добавить задачу' : '+ Add task',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
+}
+
+class _EmptyState extends StatelessWidget {
+  final bool isRussian;
+  final bool completed;
+  final VoidCallback onAdd;
+
+  const _EmptyState({
+    required this.isRussian,
+    required this.completed,
+    required this.onAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            completed ? Icons.celebration_rounded : Icons.bolt_rounded,
+            size: 54,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            completed
+                ? (isRussian
+                      ? 'Пока ничего не выполнено'
+                      : 'Nothing completed yet')
+                : (isRussian
+                      ? 'День начинается с одной задачи'
+                      : 'Start your day with one task'),
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          if (!completed) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_rounded),
+              label: Text(isRussian ? 'Добавить задачу' : 'Add a task'),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
 }

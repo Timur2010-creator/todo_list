@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 class AddPage extends StatefulWidget {
-  final String? initialText;  // Параметр для редактирования. Если null -> создаем новую, если есть текст -> редактируем
+  final String?
+  initialText; // Параметр для редактирования. Если null -> создаем новую, если есть текст -> редактируем
   final bool isRussian;
 
   const AddPage({super.key, this.initialText, required this.isRussian});
@@ -46,12 +47,17 @@ class _AddPageState extends State<AddPage> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: theme.scaffoldBackgroundColor,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: theme.colorScheme.onSurface, size: 18),
-          onPressed: () => Navigator.pop(context), // Просто возвращаемся ничего не сохраняя
+          icon: Icon(
+            Icons.arrow_back_ios_new,
+            color: theme.colorScheme.onSurface,
+            size: 18,
+          ),
+          onPressed: () =>
+              Navigator.pop(context), // Просто возвращаемся ничего не сохраняя
         ),
         title: Text(
           widget.isRussian
@@ -64,65 +70,56 @@ class _AddPageState extends State<AddPage> {
           ),
         ),
         centerTitle: true,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: Container(color: Colors.grey.shade300, height: 1.0),
-        ),
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           child: Column(
             children: [
-
-              const SizedBox(height: 16),
-
-              Container(
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: theme.colorScheme.outlineVariant, width: 1),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: TextField(
-                  controller: _taskController,
-                  maxLines: 3,
-                  minLines: 1,
-                  autofocus: true, // Сразу ставим фокус на поле ввода
-                  decoration: InputDecoration(
-                    hintText: widget.isRussian ? 'Введите название задачи' : 'Enter task name',
-                    hintStyle: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontSize: 14,
-                    ),
-                    border: InputBorder.none,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  widget.isRussian
+                      ? 'Сформулируй следующий шаг'
+                      : 'Define your next step',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: _taskController,
+                maxLines: 5,
+                minLines: 3,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: widget.isRussian
+                      ? 'Например: закончить презентацию'
+                      : 'For example: finish the presentation',
+                  filled: true,
+                  fillColor: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: .45),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(22),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.all(18),
                 ),
               ),
 
               const Spacer(),
-              
+
               SizedBox(
                 width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
+                height: 56,
+                child: FilledButton.icon(
                   onPressed: _saveTask,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3B82F6),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: Text(
+                  icon: const Icon(Icons.check_rounded),
+                  label: Text(
                     widget.isRussian
                         ? (_isEditing ? 'Обновить' : 'Сохранить')
                         : (_isEditing ? 'Update' : 'Save'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
                   ),
                 ),
               ),

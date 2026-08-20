@@ -1,7 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:todo_list/home/home_page.dart';
-import 'package:todo_list/onboarding_page.dart';
+import 'package:todo_list/home/onboard/onboarding_page.dart';
 
 class MyApp extends StatefulWidget {
   final bool initialOnboardingSeen;
@@ -52,16 +52,31 @@ class _MyAppState extends State<MyApp> {
       themeMode: _themeMode,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF3B82F6)),
-        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF0E7490),
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF7F9F8),
+        fontFamily: 'Roboto',
+        appBarTheme: const AppBarTheme(centerTitle: false),
+        inputDecorationTheme: const InputDecorationTheme(filled: true),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFF0E7490),
+          foregroundColor: Colors.white,
+        ),
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF3B82F6),
+          seedColor: const Color(0xFF38BDF8),
           brightness: Brightness.dark,
         ),
-        scaffoldBackgroundColor: const Color(0xFF111827),
+        scaffoldBackgroundColor: const Color(0xFF10191B),
+        fontFamily: 'Roboto',
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFF38BDF8),
+          foregroundColor: Color(0xFF082F36),
+        ),
       ),
       home: _isOnboardingSeen
           ? HomePage(
