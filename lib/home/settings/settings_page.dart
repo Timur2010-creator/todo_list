@@ -27,98 +27,109 @@ class SettingsPage extends StatelessWidget {
       child: BlocBuilder<SettingCubit, bool>(
         builder: (context, isDark) {
           final theme = Theme.of(context);
+          final primary = theme.colorScheme.primary;
 
           return Scaffold(
-            backgroundColor: isDark ? Colors.black : theme.scaffoldBackgroundColor,
+            backgroundColor: theme.scaffoldBackgroundColor,
             appBar: AppBar(
-              backgroundColor: theme.scaffoldBackgroundColor,
+              backgroundColor: Colors.transparent,
               elevation: 0,
               scrolledUnderElevation: 0,
-              title: Text(
-                isRussian ? 'Настройки' : 'Settings',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              centerTitle: true,
+              title: Text(isRussian ? 'Настройки' : 'Settings'),
             ),
             body: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
               children: [
+                Text(
+                  isRussian ? 'Персонализируйте приложение' : 'Make it yours',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  isRussian
+                      ? 'Выберите язык и внешний вид для комфортной работы.'
+                      : 'Choose the language and appearance that work best for you.',
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _SectionLabel(
+                  icon: Icons.translate_rounded,
+                  title: isRussian ? 'Язык' : 'Language',
+                  color: primary,
+                ),
+                const SizedBox(height: 10),
                 Card(
+                  margin: EdgeInsets.zero,
+                  elevation: 0,
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(18),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isRussian ? 'Язык приложения' : 'App language',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            ChoiceChip(
-                              label: const Text('Русский'),
-                              selected: isRussian,
-                              onSelected: (_) => onLanguageChanged(),
-                            ),
-                            ChoiceChip(
-                              label: const Text('English'),
-                              selected: !isRussian,
-                              onSelected: (_) => onLanguageChanged(),
-                            ),
-                          ],
-                        ),
+                    padding: const EdgeInsets.all(6),
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'ru', label: Text('Русский')),
+                        ButtonSegment(value: 'en', label: Text('English')),
                       ],
+                      selected: {isRussian ? 'ru' : 'en'},
+                      onSelectionChanged: (_) => onLanguageChanged(),
+                      showSelectedIcon: false,
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
+                _SectionLabel(
+                  icon: isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                  title: isRussian ? 'Внешний вид' : 'Appearance',
+                  color: primary,
+                ),
+                const SizedBox(height: 10),
                 Card(
+                  margin: EdgeInsets.zero,
+                  elevation: 0,
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(18),
                   ),
-                  child: SwitchListTile(
+                  child: SwitchListTile.adaptive(
                     value: isDark,
-                    onChanged: (val) {
-                      context.read<SettingCubit>().setTheme(val);
-                      onThemeChanged(val);
+                    onChanged: (value) {
+                      context.read<SettingCubit>().setTheme(value);
+                      onThemeChanged(value);
                     },
-                    title: Text(isRussian ? 'Тема приложения' : 'App theme'),
+                    title: Text(isRussian ? 'Тёмная тема' : 'Dark theme'),
                     subtitle: Text(
-                      isRussian
-                          ? 'Переключает светлую и темную тему по всему приложению'
-                          : 'Switches light and dark theme throughout the app',
+                      isRussian ? 'Бережёт глаза в темноте' : 'Easier on the eyes at night',
                     ),
-                    secondary: Icon(
-                      isDark ? Icons.dark_mode : Icons.light_mode,
-                      color: const Color(0xFF3B82F6),
-                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    activeColor: primary,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
+                _SectionLabel(
+                  icon: Icons.storage_rounded,
+                  title: isRussian ? 'Данные' : 'Data',
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(height: 10),
                 Card(
+                  margin: EdgeInsets.zero,
+                  elevation: 0,
+                  color: theme.colorScheme.errorContainer.withValues(alpha: .42),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(18),
                   ),
                   child: ListTile(
-                    leading: const Icon(Icons.delete_sweep_outlined, color: Color(0xFF3B82F6)),
+                    leading: Icon(Icons.delete_sweep_outlined, color: theme.colorScheme.error),
                     title: Text(isRussian ? 'Очистить все задачи' : 'Clear all tasks'),
-                    subtitle: Text(
-                      isRussian
-                          ? 'Удаляет все сохранённые задачи с устройства'
-                          : 'Deletes all saved tasks from the device',
-                    ),
-                    onTap: () {
-                      onClearTasks?.call();
-                    },
+                    subtitle: Text(isRussian ? 'Удалить задачи с устройства' : 'Remove tasks from this device'),
+                    trailing: Icon(Icons.chevron_right_rounded, color: theme.colorScheme.error),
+                    onTap: onClearTasks,
                   ),
                 ),
               ],
@@ -126,6 +137,36 @@ class SettingsPage extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Color color;
+
+  const _SectionLabel({
+    required this.icon,
+    required this.title,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Text(
+          title.toUpperCase(),
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+              ),
+        ),
+      ],
     );
   }
 }
